@@ -3,9 +3,10 @@ use crate::rest_api::RestApi;
 use lightstreamer_client::ls_client::{LightstreamerClient, SubscriptionRequest, Transport};
 use lightstreamer_client::subscription::Subscription;
 use signal_hook::low_level::signal_name;
-use signal_hook::{consts::SIGINT, consts::SIGTERM, iterator::Signals};
-use std::error::Error;
+use signal_hook::{consts::SIGINT, consts::SIGTERM};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::error::Error;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::Notify;
 
@@ -194,16 +195,12 @@ impl StreamingApi {
     /// The function panics if it fails to create the signal iterator.
     ///
     async fn setup_signal_hook(shutdown_signal: Arc<Notify>) {
-        // Create a signal set of signals to be handled and a signal iterator to monitor them.
-        let signals = &[SIGINT, SIGTERM];
-        let mut signals_iterator = Signals::new(signals).expect("Failed to create signal iterator");
-
-        // Create a new thread to handle signals sent to the process
+        // Use tokio's signal handling which works cross-platform
         tokio::spawn(async move {
-            for signal in signals_iterator.forever() {
-                println!("Received signal: {}", signal_name(signal).unwrap());
+            // Set up handler for Ctrl+C
+            if let Ok(()) = tokio::signal::ctrl_c().await {
+                println!("Received Ctrl+C signal");
                 let _ = shutdown_signal.notify_one();
-                break;
             }
         });
     }
